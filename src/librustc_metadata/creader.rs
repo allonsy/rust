@@ -17,11 +17,11 @@ use cstore::{self, CStore, CrateSource, MetadataBlob};
 use decoder;
 use loader::{self, CratePaths};
 
-use rustc::back::svh::Svh;
 use rustc::dep_graph::DepNode;
 use rustc::session::{config, Session};
 use rustc::session::search_paths::PathKind;
 use rustc::middle::cstore::{CrateStore, validate_crate_name, ExternCrate};
+use rustc::middle::svh::Svh;
 use rustc::util::nodemap::FnvHashMap;
 use rustc::front::map as hir_map;
 

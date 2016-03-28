@@ -8,65 +8,27 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! Calculation and management of a Strict Version Hash for crates
-//!
-//! # Today's ABI problem
-//!
-//! In today's implementation of rustc, it is incredibly difficult to achieve
-//! forward binary compatibility without resorting to C-like interfaces. Within
-//! rust code itself, abi details such as symbol names suffer from a variety of
-//! unrelated factors to code changing such as the "def id drift" problem. This
-//! ends up yielding confusing error messages about metadata mismatches and
-//! such.
-//!
-//! The core of this problem is when an upstream dependency changes and
-//! downstream dependents are not recompiled. This causes compile errors because
-//! the upstream crate's metadata has changed but the downstream crates are
-//! still referencing the older crate's metadata.
-//!
-//! This problem exists for many reasons, the primary of which is that rust does
-//! not currently support forwards ABI compatibility (in place upgrades of a
-//! crate).
-//!
-//! # SVH and how it alleviates the problem
-//!
-//! With all of this knowledge on hand, this module contains the implementation
-//! of a notion of a "Strict Version Hash" for a crate. This is essentially a
-//! hash of all contents of a crate which can somehow be exposed to downstream
-//! crates.
-//!
-//! This hash is currently calculated by just hashing the AST, but this is
-//! obviously wrong (doc changes should not result in an incompatible ABI).
-//! Implementation-wise, this is required at this moment in time.
-//!
-//! By encoding this strict version hash into all crate's metadata, stale crates
-//! can be detected immediately and error'd about by rustc itself.
-//!
-//! # Relevant links
-//!
-//! Original issue: https://github.com/rust-lang/rust/issues/10207
+//! Calculation of a Strict Version Hash for crates.  For a length
+//! comment explaining the general idea, see `librustc/middle/svh.rs`.
 
-use std::fmt;
 use std::hash::{Hash, SipHasher, Hasher};
-use rustc_front::hir;
-use rustc_front::intravisit as visit;
+use rustc::middle::def_id::{CRATE_DEF_INDEX, DefId};
+use rustc::middle::svh::Svh;
+use rustc::ty;
+use rustc_front::intravisit::{self, Visitor};
 
-#[derive(Clone, PartialEq, Debug)]
-pub struct Svh {
-    hash: String,
+use self::svh_visitor::StrictVersionHashVisitor;
+
+pub trait SvhCalculate {
+    /// Calculate the SVH for an entire krate.
+    fn calculate_krate_hash(&self) -> Svh;
+
+    /// Calculate the SVH for a particular item.
+    fn calculate_item_hash(&self, def_id: DefId) -> u64;
 }
 
-impl Svh {
-    pub fn new(hash: &str) -> Svh {
-        assert!(hash.len() == 16);
-        Svh { hash: hash.to_string() }
-    }
-
-    pub fn as_str<'a>(&'a self) -> &'a str {
-        &self.hash
-    }
-
-    pub fn calculate(crate_disambiguator: &str, krate: &hir::Crate) -> Svh {
+impl<'tcx> SvhCalculate for ty::TyCtxt<'tcx> {
+    fn calculate_krate_hash(&self) -> Svh {
         // FIXME (#14132): This is better than it used to be, but it still not
         // ideal. We now attempt to hash only the relevant portions of the
         // Crate AST as well as the top-level crate attributes. (However,
@@ -74,17 +36,24 @@ impl Svh {
         // to ensure it is not incorporating implementation artifacts into
         // the hash that are not otherwise visible.)
 
+        let crate_disambiguator = self.sess.crate_disambiguator.get();
+        let krate = self.map.krate();
+
         // FIXME: this should use SHA1, not SipHash. SipHash is not built to
         //        avoid collisions.
         let mut state = SipHasher::new();
+        debug!("state: {:?}", state);
 
         "crate_disambiguator".hash(&mut state);
-        crate_disambiguator.len().hash(&mut state);
-        crate_disambiguator.hash(&mut state);
+        crate_disambiguator.as_str().len().hash(&mut state);
+        crate_disambiguator.as_str().hash(&mut state);
+
+        debug!("crate_disambiguator: {:?}", crate_disambiguator.as_str());
+        debug!("state: {:?}", state);
 
         {
-            let mut visit = svh_visitor::make(&mut state, krate);
-            visit::walk_crate(&mut visit, krate);
+            let mut visit = StrictVersionHashVisitor::new(&mut state, self);
+            krate.visit_all_items(&mut visit);
         }
 
         // FIXME (#14132): This hash is still sensitive to e.g. the
@@ -97,28 +66,32 @@ impl Svh {
         // We hash only the MetaItems instead of the entire Attribute
         // to avoid hashing the AttrId
         for attr in &krate.attrs {
+            debug!("krate attr {:?}", attr);
             attr.node.value.hash(&mut state);
         }
 
-        let hash = state.finish();
-        return Svh {
-            hash: (0..64).step_by(4).map(|i| hex(hash >> i)).collect()
-        };
-
-        fn hex(b: u64) -> char {
-            let b = (b & 0xf) as u8;
-            let b = match b {
-                0 ... 9 => '0' as u8 + b,
-                _ => 'a' as u8 + b - 10,
-            };
-            b as char
-        }
+        Svh::from_hash(state.finish())
     }
-}
 
-impl fmt::Display for Svh {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.pad(self.as_str())
+    fn calculate_item_hash(&self, def_id: DefId) -> u64 {
+        assert!(def_id.is_local());
+
+        let mut state = SipHasher::new();
+
+        {
+            let mut visit = StrictVersionHashVisitor::new(&mut state, self);
+            if def_id.index == CRATE_DEF_INDEX {
+                // the crate root itself is not registered in the map
+                // as an item, so we have to fetch it this way
+                let krate = self.map.krate();
+                intravisit::walk_crate(&mut visit, krate);
+            } else {
+                let node_id = self.map.as_local_node_id(def_id).unwrap();
+                visit.visit_item(self.map.expect_item(node_id));
+            }
+        }
+
+        state.finish()
     }
 }
 
@@ -134,6 +107,7 @@ mod svh_visitor {
     use syntax::ast::{self, Name, NodeId};
     use syntax::codemap::Span;
     use syntax::parse::token;
+    use rustc::ty;
     use rustc_front::intravisit as visit;
     use rustc_front::intravisit::{Visitor, FnKind};
     use rustc_front::hir::*;
@@ -141,13 +115,17 @@ mod svh_visitor {
 
     use std::hash::{Hash, SipHasher};
 
-    pub struct StrictVersionHashVisitor<'a> {
-        pub krate: &'a Crate,
+    pub struct StrictVersionHashVisitor<'a, 'tcx: 'a> {
+        pub tcx: &'a ty::TyCtxt<'tcx>,
         pub st: &'a mut SipHasher,
     }
 
-    pub fn make<'a>(st: &'a mut SipHasher, krate: &'a Crate) -> StrictVersionHashVisitor<'a> {
-        StrictVersionHashVisitor { st: st, krate: krate }
+    impl<'a, 'tcx> StrictVersionHashVisitor<'a, 'tcx> {
+        pub fn new(st: &'a mut SipHasher,
+                   tcx: &'a ty::TyCtxt<'tcx>)
+                   -> Self {
+            StrictVersionHashVisitor { st: st, tcx: tcx }
+        }
     }
 
     // To off-load the bulk of the hash-computation on #[derive(Hash)],
@@ -301,9 +279,11 @@ mod svh_visitor {
         }
     }
 
-    impl<'a> Visitor<'a> for StrictVersionHashVisitor<'a> {
+    impl<'a, 'tcx> Visitor<'a> for StrictVersionHashVisitor<'a, 'tcx> {
         fn visit_nested_item(&mut self, item: ItemId) {
-            self.visit_item(self.krate.item(item.id))
+            debug!("visit_nested_item: {:?} st={:?}", item, self.st);
+            let def_path = self.tcx.map.def_path_from_id(item.id);
+            def_path.hash(self.st);
         }
 
         fn visit_variant_data(&mut self, s: &'a VariantData, name: Name,
@@ -368,6 +348,7 @@ mod svh_visitor {
         }
 
         fn visit_item(&mut self, i: &'a Item) {
+            debug!("visit_item: {:?} st={:?}", i, self.st);
             // FIXME (#14132) ideally would incorporate reachability
             // analysis somewhere here, so items that never leak into
             // downstream crates (e.g. via monomorphisation or

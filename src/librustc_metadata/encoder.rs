@@ -30,9 +30,9 @@ use rustc::traits::specialization_graph;
 use rustc::ty::{self, Ty, TyCtxt};
 use rustc::ty::util::IntTypeExt;
 
-use rustc::back::svh::Svh;
 use rustc::front::map::{LinkedPath, PathElem, PathElems};
 use rustc::front::map as ast_map;
+use rustc::middle::svh::Svh;
 use rustc::mir::mir_map::MirMap;
 use rustc::session::config;
 use rustc::util::nodemap::{FnvHashMap, NodeMap, NodeSet};

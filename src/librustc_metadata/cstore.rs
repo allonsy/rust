@@ -20,8 +20,8 @@ use decoder;
 use index;
 use loader;
 
-use rustc::back::svh::Svh;
 use rustc::middle::cstore::{ExternCrate};
+use rustc::middle::svh::Svh;
 use rustc::util::nodemap::{FnvHashMap, NodeMap, NodeSet, DefIdMap};
 use rustc::middle::def_id::DefId;
 

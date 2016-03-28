@@ -18,7 +18,8 @@ use middle::cstore::{NativeLibraryKind, LinkMeta, LinkagePreference};
 use middle::def;
 use middle::lang_items;
 use rustc::ty::{self, Ty, TyCtxt, VariantKind};
-use middle::def_id::{DefId, DefIndex, CRATE_DEF_INDEX};
+use middle::def_id::{DefId, DefIndex, CRATE_DEF_INDEX}
+;use middle::svh::Svh;
 
 use rustc::front::map as hir_map;
 use rustc::mir::repr::Mir;
@@ -31,7 +32,6 @@ use std::path::PathBuf;
 use syntax::ast;
 use syntax::attr;
 use syntax::parse::token;
-use rustc_back::svh::Svh;
 use rustc_back::target::Target;
 use rustc_front::hir;
 
