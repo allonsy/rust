@@ -51,7 +51,6 @@ extern crate rustc_front;
 pub mod tempdir;
 pub mod rpath;
 pub mod sha2;
-pub mod svh;
 pub mod target;
 pub mod slice;
 pub mod dynamic_lib;

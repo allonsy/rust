@@ -22,12 +22,12 @@
 // are *mostly* used as a part of that interface, but these should
 // probably get a better home if someone can find one.
 
-use back::svh::Svh;
 use front::map as hir_map;
 use middle::def::{self, Def};
 use middle::lang_items;
 use ty::{self, Ty, TyCtxt, VariantKind};
 use middle::def_id::{DefId, DefIndex};
+use middle::svh::Svh;
 use mir::repr::Mir;
 use mir::mir_map::MirMap;
 use session::Session;

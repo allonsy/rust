@@ -47,6 +47,7 @@ extern crate libc;
 extern crate rustc_back;
 extern crate rustc_data_structures;
 extern crate rustc_front;
+extern crate rustc_incremental;
 pub extern crate rustc_llvm as llvm;
 extern crate rustc_mir;
 extern crate rustc_platform_intrinsics as intrinsics;
@@ -67,7 +68,6 @@ pub use disr::Disr;
 
 pub mod back {
     pub use rustc_back::rpath;
-    pub use rustc_back::svh;
 
     pub mod archive;
     pub mod linker;
@@ -86,7 +86,6 @@ mod macros;
 mod abi;
 mod adt;
 mod asm;
-mod assert_dep_graph;
 mod attributes;
 mod base;
 mod basic_block;

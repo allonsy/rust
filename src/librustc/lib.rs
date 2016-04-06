@@ -38,6 +38,7 @@
 #![feature(rustc_private)]
 #![feature(slice_patterns)]
 #![feature(staged_api)]
+#![feature(step_by)]
 #![feature(str_char)]
 #![feature(question_mark)]
 #![cfg_attr(test, feature(test))]
@@ -74,7 +75,6 @@ pub mod diagnostics;
 
 pub mod back {
     pub use rustc_back::rpath;
-    pub use rustc_back::svh;
 }
 
 pub mod cfg;
@@ -113,6 +113,7 @@ pub mod middle {
     pub mod recursion_limit;
     pub mod resolve_lifetime;
     pub mod stability;
+    pub mod svh;
     pub mod weak_lang_items;
 }
 

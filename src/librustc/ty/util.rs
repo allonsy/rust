@@ -10,11 +10,11 @@
 
 //! misc. type-system utilities too small to deserve their own file
 
-use back::svh::Svh;
 use middle::def_id::DefId;
 use ty::subst;
 use infer;
 use middle::pat_util;
+use middle::svh::Svh;
 use traits::{self, ProjectionMode};
 use ty::{self, Ty, TyCtxt, TypeAndMut, TypeFlags, TypeFoldable};
 use ty::{Disr, ParameterEnvironment};
